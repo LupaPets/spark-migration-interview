@@ -19,7 +19,9 @@ object PipelineContractCheck {
           SyntheticExports.forSource(source, spark), spark).run()
         val invoices = batch.invoices.collect().toSeq
         check(s"$source preserves current invoices") {
-          invoices.filterNot(_.source_id == "old_1").size == 4
+          val expected = Seq(("clinic_a", "inv_1"), ("clinic_a", "inv_2"),
+            ("clinic_a", "inv_3"), ("clinic_b", "inv_1"))
+          invoices.filterNot(_.source_id == "old_1").map(i => (i.clinic_id, i.source_id)).sorted == expected.sorted
         }
         check(s"$source preserves signed current total") {
           invoices.filterNot(_.source_id == "old_1").map(_.amount_cents).sum == 6500L
