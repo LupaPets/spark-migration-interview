@@ -7,6 +7,8 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 object InvoiceLoader {
   def load(tables: SourceTables, spark: SparkSession): Dataset[InvoiceInput] = {
     import spark.implicits._
-    tables.table("invoices").as[InvoiceInput]
+    val current = tables.table("invoices")
+    val historical = tables.table("archived_invoices")
+    current.union(historical).as[InvoiceInput]
   }
 }

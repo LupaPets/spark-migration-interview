@@ -7,7 +7,8 @@ import org.apache.spark.sql.functions._
 object BatchWriter {
   def writeTable(frame: DataFrame, clinic: String, path: String): Unit =
     frame.filter(col("clinic_id") === clinic)
-      .write.mode("overwrite").option("partitionOverwriteMode", "dynamic")
+      .coalesce(1)
+      .write.mode("overwrite")
       .partitionBy("clinic_id").parquet(path)
 
   def write(batch: MigrationBatch, config: PipelineConfig): Unit = {

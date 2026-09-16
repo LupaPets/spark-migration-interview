@@ -6,7 +6,8 @@ import org.apache.spark.sql.functions._
 
 object InvoiceMappings {
   def enrich(input: Dataset[InvoiceInput], vets: DataFrame, clinics: DataFrame): DataFrame =
-    input.toDF().join(VetDirectory.active(vets), Seq("vet_id"), "left")
+    input.toDF().join(vets.select(col("vet_id"), col("name").as("vet_name"), col("active")), Seq("vet_id"), "left")
+      .filter(col("active") === true)
       .join(broadcast(clinics), Seq("clinic_id"), "left")
 
   def transform(input: Dataset[InvoiceInput], source: String, vets: DataFrame, clinics: DataFrame): Dataset[StoreInvoice] = {
