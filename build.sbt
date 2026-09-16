@@ -8,7 +8,10 @@ Test / parallelExecution := false
 val sparkOptions = Seq(
   "-Xmx2g",
   "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+  "--add-exports=java.base/sun.security.action=ALL-UNNAMED",
   "-Dio.netty.tryReflectionSetAccessible=true"
 )
 Compile / run / javaOptions ++= sparkOptions
 Test / javaOptions ++= sparkOptions
+Compile / run / envVars += "SPARK_LOCAL_IP" -> "127.0.0.1"
+Test / envVars += "SPARK_LOCAL_IP" -> "127.0.0.1"
