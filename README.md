@@ -17,6 +17,7 @@ The proposed change adds historical invoice support to an existing pipeline. Rev
 - `shared/`: identity generation, related-entity mappings and enrichment.
 - `output/`: common partitioned storage writer.
 - `validation/`: financial reconciliation.
+- `reporting/`: bounded previews, source profiles and target inventory.
 - `demo/` and `src/test/`: synthetic exports and cross-pipeline contract checks.
 
 See [architecture](docs/architecture.md), [target contract](docs/target-contract.md), and each source's README when you need more detail. These are references for the live conversation.
@@ -28,10 +29,13 @@ For the interviewer; candidates need no setup. Use JDK 17 or 21 and sbt.
 ```sh
 sbt compile
 sbt "Test / runMain migration.PipelineContractCheck"
+sbt "Test / runMain migration.PlatformSupportCheck"
 sbt "runMain migration.Main vet_system_one"
 sbt "runMain migration.Main vet_system_two"
 ```
 
 The default demo only reads synthetic data and displays results. An optional second argument is a local output root; the writer updates clinic_a there. Use a new disposable directory when exploring writes. The shared writer is not a transactional multi-table store.
+
+Use `--clinic clinic_b` to change the output scope, `--preview 5` to limit displayed invoices, and `--validate` to display identity and foreign-key diagnostics. Validation is a diagnostic report, not an automatic write gate. Invoice datasets are persisted during repeated reporting and released even if a consumer fails.
 
 `main` is a working platform baseline. The interview PR intentionally introduces defects. Contract checks pass on main; existing checks may fail on the PR branch, and they are not comprehensive.

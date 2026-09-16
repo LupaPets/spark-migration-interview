@@ -23,3 +23,7 @@ A subclass may override transformInvoices for source-specific behavior. Shared m
 BatchWriter replaces the requested clinic partition independently in each target table. It is not a cross-table transaction. The caller owns sequencing and retry orchestration. Audit writes go to a distinct run path. MigrationBatch datasets are lazy; building the batch does not execute a Spark job.
 
 The demo loads both clinic_a and clinic_b to exercise tenant isolation and repeated source IDs. PipelineConfig.clinicId controls which partition is published. The current job contract permits loading a multi-clinic export.
+
+RunOptions validates command-line inputs before creating Spark. SourceProfile produces aggregate input statistics. BatchReport shows inventory and enrichment coverage with bounded driver previews. BatchValidation returns distributed diagnostic rows for duplicate IDs and unresolved references; callers decide how to handle them. These reports do not mutate data or silently discard invalid rows.
+
+InvoiceCache scopes persistence to the repeated invoice consumers in Main and releases it in a finally block. Other entities remain lazy. SchemaContract checks required names and types without depending on field order or rejecting additional source metadata.
