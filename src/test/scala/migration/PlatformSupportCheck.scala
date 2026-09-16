@@ -1,13 +1,64 @@
 package migration
 
 import migration.core._
+import migration.demo.SyntheticExports
 import migration.model._
+import migration.output.BatchWriter
+import migration.pipelines.systemone.InvoiceLoader
 import migration.reporting.BatchReport
-import migration.validation.BatchValidation
+import migration.validation.{BatchValidation, Reconciliation}
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.functions._
 
 object PlatformSupportCheck {
+  private def checkFinancialReports(batch: MigrationBatch, spark: SparkSession): Unit = {
+    import spark.implicits._
+    val original = Seq(
+      InvoiceInput("clinic_a", "1", "owner", None, 1000L, "2021-01-01"),
+      InvoiceInput("clinic_a", "2", "owner", None, 2000L, "2021-01-04"),
+      InvoiceInput("clinic_a", "3", "owner", None, -500L, "2021-01-04"),
+      InvoiceInput("clinic_b", "1", "owner", None, 4000L, "2021-01-04")
+    ).toDS()
+    assert(Reconciliation.compare(original, batch.invoices).filter(!$"matches").isEmpty)
+
+    val a = Reconciliation.byMonth(batch.invoices).filter($"clinic_id" === "clinic_a").first()
+    assert(a.getAs[Long]("sales_cents") == 3000L)
+    assert(a.getAs[Long]("credit_cents") == -500L)
+    assert(a.getAs[Long]("net_cents") == 2500L)
+
+    val missingClinic = batch.invoices.filter($"clinic_id" === "clinic_a")
+    val comparison = Reconciliation.compare(original, missingClinic)
+    val absent = comparison.filter($"clinic_id" === "clinic_b").first()
+    assert(absent.getAs[Long]("count_delta") == -1L)
+    assert(absent.getAs[Long]("amount_delta") == -4000L)
+    assert(!absent.getAs[Boolean]("matches"))
+
+    val extra = batch.invoices.head().copy(id = "extra", clinic_id = "clinic_extra")
+    val unexpected = Reconciliation.compare(original, batch.invoices.union(Seq(extra).toDS()))
+      .filter($"clinic_id" === "clinic_extra").first()
+    assert(unexpected.getAs[Long]("expected_count") == 0L)
+    assert(unexpected.getAs[Long]("actual_count") == 1L)
+    assert(Reconciliation.compare(spark.emptyDataset[InvoiceInput], spark.emptyDataset[StoreInvoice]).isEmpty)
+  }
+
+  private def checkArchiveReports(spark: SparkSession): Unit = {
+    import spark.implicits._
+    val tables = SyntheticExports.forSource("vet_system_one", spark)
+    val profiles = InvoiceLoader.profiles(tables, spark).collect().map(row =>
+      row.getAs[String]("feed") -> row.getAs[Long]("row_count")).toMap
+    assert(profiles == Map("current" -> 4L, "historical" -> 1L))
+    assert(InvoiceLoader.overlappingKeys(tables).isEmpty)
+    assert(InvoiceLoader.diagnostics(tables).filter($"invalid_dates" > 0L).isEmpty)
+
+    val badDate = tables.table("invoices").withColumn("invoice_date", lit("not-a-date"))
+    val broken = new InMemoryTables(Map(
+      "invoices" -> badDate,
+      "archived_invoices" -> tables.table("archived_invoices")
+    ))
+    val diagnostics = InvoiceLoader.diagnostics(broken).filter($"feed" === "current").first()
+    assert(diagnostics.getAs[Long]("invalid_dates") == 4L)
+  }
+
   def main(args: Array[String]): Unit = {
     assert(RunOptions.parse(Seq.empty).exists(_.source == "vet_system_one"))
     assert(RunOptions.parse(Seq("unknown")).isLeft)
@@ -48,6 +99,13 @@ object PlatformSupportCheck {
       val failed = scala.util.Try(InvoiceCache.withCached(batch)(_ => throw new IllegalStateException("consumer failed")))
       assert(failed.isFailure)
       assert(cached.storageLevel == org.apache.spark.storage.StorageLevel.NONE)
+      checkFinancialReports(batch, spark)
+      checkArchiveReports(spark)
+      val destinations = BatchWriter.plan(batch, PipelineConfig("vet_system_two", "clinic_a", "/tmp/example/"))
+      assert(destinations.map(_.name).toSet == Set("clients", "pets", "invoices", "payments"))
+      assert(destinations.forall(_.path.startsWith("/tmp/example/")))
+      assert(destinations.forall(!_.path.contains("//")))
+      assert(scala.util.Try(BatchWriter.plan(batch, PipelineConfig("vet_system_two", "clinic_a", ""))).isFailure)
       println("Platform support checks passed")
     } finally spark.stop()
   }

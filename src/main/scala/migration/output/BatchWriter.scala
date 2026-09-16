@@ -1,21 +1,40 @@
 package migration.output
 
-import migration.core.{MigrationBatch, PipelineConfig}
+import migration.core.{BatchTables, MigrationBatch, PipelineConfig}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 
 object BatchWriter {
+  final case class ExportTable(name: String, path: String, rows: DataFrame)
+
+  def plan(batch: MigrationBatch, config: PipelineConfig): Seq[ExportTable] = {
+    require(config.outputRoot.trim.nonEmpty, "Output root must not be empty")
+    require(config.clinicId.nonEmpty, "Clinic ID must not be empty")
+    val root = config.outputRoot.stripSuffix("/")
+    BatchTables.all(batch).map { case (name, rows) =>
+      ExportTable(name, s"$root/$name", rows)
+    }
+  }
+
+  def describePlan(batch: MigrationBatch, config: PipelineConfig): DataFrame = {
+    import batch.invoices.sparkSession.implicits._
+    plan(batch, config).map(table => (table.name, config.clinicId, table.path))
+      .toDF("entity", "clinic_id", "destination")
+  }
+
   def writeTable(frame: DataFrame, clinic: String, path: String): Unit =
-    frame.filter(col("clinic_id") === clinic)
+    BatchTables.forClinic(frame, clinic)
       .coalesce(1)
       .write.mode("overwrite")
+      .option("compression", "snappy")
+      .option("maxRecordsPerFile", 250000)
       .partitionBy("clinic_id").parquet(path)
 
   def write(batch: MigrationBatch, config: PipelineConfig): Unit = {
-    writeTable(batch.clients.toDF(), config.clinicId, s"${config.outputRoot}/clients")
-    writeTable(batch.pets.toDF(), config.clinicId, s"${config.outputRoot}/pets")
-    writeTable(batch.invoices.toDF(), config.clinicId, s"${config.outputRoot}/invoices")
-    writeTable(batch.payments.toDF(), config.clinicId, s"${config.outputRoot}/payments")
+    plan(batch, config).foreach { table =>
+      println(s"Writing ${table.name} for ${config.clinicId} to ${table.path}")
+      writeTable(table.rows, config.clinicId, table.path)
+    }
   }
 
   def audit(frame: DataFrame, path: String): Unit =

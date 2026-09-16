@@ -6,12 +6,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import migration.model.{InvoiceInput, StoreInvoice}
 import migration.shared.{InvoiceMappings, StableIds}
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 
 final class Pipeline(config: PipelineConfig, tables: SourceTables, spark: SparkSession)
     extends BasePipeline(config, tables, spark) {
   override def loadInvoices(): Dataset[InvoiceInput] = InvoiceLoader.load(tables, spark)
+
+  override def inputSummary(): DataFrame = InvoiceLoader.profiles(tables, spark)
 
   override def transformInvoices(input: Dataset[InvoiceInput]): Dataset[StoreInvoice] = {
     import spark.implicits._
