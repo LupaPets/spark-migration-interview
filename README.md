@@ -4,9 +4,15 @@ A fictional Scala / Apache Spark pull-request interview. All names, records and 
 
 ## Your task
 
-Review the proposed migration as if it were going into production. Spend about 35 minutes on `InvoiceMigration.scala`, then discuss your highest-priority findings for 10 minutes. `FollowUpTransforms.scala` is an optional extension for a longer session.
+This is a live, shared-screen review and coding exercise. No preparation, installation or advance reading is expected. The interviewer will introduce the context, open `InvoiceMigration.scala` and work through it with you.
 
-For each finding, identify the location, a concrete triggering input or scale, the effect, and a practical fix or regression test. Prioritize data loss, incorrect financial totals and operational failures. You do not need to rewrite the pipeline. Explain which changes you would block and which need measurements first. Reasonable code should not need to change merely because it looks unusual.
+Read the code together and think aloud: what does it do, what would you check before shipping it, and which change would you make first? Ask questions as you go. After discussing a finding, implement a small correction or regression test together in the interviewer's environment. There is no expectation to find or fix everything. `FollowUpTransforms.scala` is available if there is time for a deeper discussion.
+
+For each finding, explain a concrete triggering input or scale, the effect, and a practical fix or regression test. Prioritize data loss, incorrect financial totals and operational failures. Explain which changes you would block and which need measurements first. Reasonable code should not need to change merely because it looks unusual.
+
+## Context to start the conversation
+
+We are combining invoice exports from two fictional veterinary systems. Every invoice must survive enrichment, totals must remain correct, and rerunning one clinic must preserve other clinics' output. The data is much larger than the driver's memory. The detailed contract below is a reference to consult during the conversation, not required advance reading.
 
 ## Business contract
 
@@ -26,6 +32,8 @@ The full input is 80 million invoices, roughly 30 GB before JVM object overhead.
 The optional follow-up's `readForClinic` consumes the canonical schema, including nullable `qty` and a large `notes` column. Its audit output promises one row per invoice; its recent-vet selector uses the same versioning contract above.
 
 ## Running locally
+
+These commands are for the interviewer or for optional exploration after the session. Candidates do not need to set up a local environment.
 
 Use JDK 17 or 21 and sbt. Versions are pinned in `build.sbt` and `project/build.properties`.
 
