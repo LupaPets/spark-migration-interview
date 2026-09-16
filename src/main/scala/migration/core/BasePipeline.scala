@@ -2,10 +2,13 @@ package migration.core
 
 import migration.model._
 import migration.shared.{EntityMappings, InvoiceMappings}
-import org.apache.spark.sql.{Dataset, SparkSession}
+import migration.reporting.SourceProfile
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 abstract class BasePipeline(val config: PipelineConfig, val tables: SourceTables, val spark: SparkSession) {
   def loadInvoices(): Dataset[InvoiceInput]
+
+  def inputSummary(): DataFrame = SourceProfile.describe(loadInvoices(), config.source)
 
   def transformInvoices(input: Dataset[InvoiceInput]): Dataset[StoreInvoice] =
     InvoiceMappings.transform(input, config.source, tables.table("vets"), tables.table("clinics"))
