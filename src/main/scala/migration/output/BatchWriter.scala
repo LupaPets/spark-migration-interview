@@ -23,7 +23,7 @@ object BatchWriter {
   }
 
   def writeTable(frame: DataFrame, clinic: String, path: String): Unit =
-    BatchTables.forClinic(frame, clinic)
+    BatchTables.forClinic(frame, "clinic_a")
       .coalesce(1)
       .write.mode("overwrite")
       .option("compression", "snappy")

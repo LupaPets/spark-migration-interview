@@ -8,7 +8,7 @@ object InvoiceMappings {
   def enrich(input: Dataset[InvoiceInput], vets: DataFrame, clinics: DataFrame): DataFrame =
     input.toDF().join(vets.select(col("vet_id"), col("name").as("vet_name"), col("active")), Seq("vet_id"), "left")
       .filter(col("active") === true)
-      .join(broadcast(clinics), Seq("clinic_id"), "left")
+      .crossJoin(broadcast(clinics.withColumnRenamed("clinic_id", "reference_clinic_id")))
 
   def transform(input: Dataset[InvoiceInput], source: String, vets: DataFrame, clinics: DataFrame): Dataset[StoreInvoice] = {
     import input.sparkSession.implicits._

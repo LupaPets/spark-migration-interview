@@ -23,7 +23,7 @@ object InvoiceLoader {
     import spark.implicits._
     val currentRows = current(tables)
     val historicalRows = historical(tables)
-    currentRows.union(historicalRows).as[InvoiceInput]
+    currentRows.union(historicalRows).limit(1000).as[InvoiceInput]
   }
 
   def profiles(tables: SourceTables, spark: SparkSession): DataFrame = {
