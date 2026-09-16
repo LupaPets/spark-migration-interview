@@ -29,21 +29,15 @@ object Reconciliation {
         sum(when(col("amount_cents") < 0L, col("amount_cents")).otherwise(0L)).as("credit_cents")
       )
 
-  private def totals(frame: DataFrame, prefix: String): DataFrame =
-    frame.groupBy("clinic_id").agg(
-      count(lit(1)).as(s"${prefix}_count"),
-      sum("amount_cents").as(s"${prefix}_cents")
-    )
-
   def compare(input: Dataset[InvoiceInput], output: Dataset[StoreInvoice]): DataFrame = {
-    val expected = totals(input.toDF(), "expected")
-    val actual = totals(output.toDF(), "actual")
-    val joined = expected.join(actual, Seq("clinic_id"), "full_outer")
-    val values = Seq("expected_count", "actual_count", "expected_cents", "actual_cents")
-      .foldLeft(joined) { (frame, name) =>
-        frame.withColumn(name, coalesce(col(name), lit(0L)))
-      }
-    values
+    val expected = input.groupBy("clinic_id").agg(
+      count(lit(1)).as("expected_count"), sum("amount_cents").as("expected_cents")
+    )
+    val actual = output.groupBy("clinic_id").agg(
+      count(lit(1)).as("actual_count"), sum("amount_cents").as("actual_cents")
+    )
+    expected.join(actual, Seq("clinic_id"), "full_outer")
+      .na.fill(0L, Seq("expected_count", "actual_count", "expected_cents", "actual_cents"))
       .withColumn("count_delta", col("actual_count") - col("expected_count"))
       .withColumn("amount_delta", col("actual_cents") - col("expected_cents"))
       .withColumn("matches", col("count_delta") === 0L && col("amount_delta") === 0L)
