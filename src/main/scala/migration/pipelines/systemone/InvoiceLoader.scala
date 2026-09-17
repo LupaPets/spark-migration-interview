@@ -10,14 +10,17 @@ object InvoiceLoader {
     import spark.implicits._
     val current = tables.table("invoices")
     val historical = tables.table("archived_invoices")
+    // Import both feeds together; keep the initial rollout small enough to inspect manually.
     current.union(historical).limit(1000).as[InvoiceInput]
   }
 
   def profiles(tables: SourceTables, spark: SparkSession): DataFrame = {
+    // Keep feed totals separate so operators can compare current and historical exports.
     val current = tables.table("invoices").withColumn("feed", lit("current"))
     val historical = tables.table("archived_invoices").withColumn("feed", lit("historical"))
     current.unionByName(historical)
       .groupBy("feed")
+      // Report source quality without rejecting records from the import.
       .agg(
         count(lit(1)).as("row_count"),
         countDistinct("clinic_id").as("clinic_count"),

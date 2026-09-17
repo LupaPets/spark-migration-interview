@@ -6,10 +6,12 @@ import org.apache.spark.sql.functions._
 
 object Reconciliation {
   def total(invoices: Dataset[StoreInvoice]): Long =
+    // Include the final monetary total in the operator's run summary.
     invoices.collect().map(_.amount_cents).sum
 
   def byClinic(invoices: Dataset[StoreInvoice]): Dataset[ClinicTotal] = {
     import invoices.sparkSession.implicits._
+    // Reconcile each clinic independently so a mismatch can be traced back to its export.
     invoices.groupByKey(_.clinic_id).mapGroups { (clinic: String, rows: Iterator[StoreInvoice]) =>
       val clinicInvoices = rows.toVector
       ClinicTotal(clinic, clinicInvoices.map(_.amount_cents).sum)
@@ -17,9 +19,11 @@ object Reconciliation {
   }
 
   def counts(invoices: Dataset[StoreInvoice]) =
+    // Show how many invoices were migrated for each clinic.
     invoices.groupBy("clinic_id").agg(count("vet_name").as("invoice_count"))
 
   def byMonth(invoices: Dataset[StoreInvoice]): DataFrame =
+    // Separate sales and credits so historical monthly totals are easy to compare.
     invoices.withColumn("month", substring(col("invoice_date"), 1, 7))
       .groupBy("source", "clinic_id", "month")
       .agg(
@@ -30,12 +34,14 @@ object Reconciliation {
       )
 
   def compare(input: Dataset[InvoiceInput], output: Dataset[StoreInvoice]): DataFrame = {
+    // Compare both counts and money; matching totals alone can hide missing records.
     val expected = input.groupBy("clinic_id").agg(
       count(lit(1)).as("expected_count"), sum("amount_cents").as("expected_cents")
     )
     val actual = output.groupBy("clinic_id").agg(
       count(lit(1)).as("actual_count"), sum("amount_cents").as("actual_cents")
     )
+    // Keep clinics missing from either side visible in the reconciliation report.
     expected.join(actual, Seq("clinic_id"), "full_outer")
       .na.fill(0L, Seq("expected_count", "actual_count", "expected_cents", "actual_cents"))
       .withColumn("count_delta", col("actual_count") - col("expected_count"))

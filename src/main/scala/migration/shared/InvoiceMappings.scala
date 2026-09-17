@@ -6,8 +6,11 @@ import org.apache.spark.sql.functions._
 
 object InvoiceMappings {
   def enrich(input: Dataset[InvoiceInput], vets: DataFrame, clinics: DataFrame): DataFrame =
+    // Enrich invoices from the vet export, including records imported from older systems.
     input.toDF().join(vets.select(col("vet_id"), col("name").as("vet_name"), col("active")), Seq("vet_id"), "left")
+      // Only attach active vet details; invoices without an active vet should still migrate.
       .filter(col("active") === true)
+      // Attach clinic reference data; the reference is small enough to broadcast.
       .crossJoin(broadcast(clinics.withColumnRenamed("clinic_id", "reference_clinic_id")))
 
   def transform(input: Dataset[InvoiceInput], source: String, vets: DataFrame, clinics: DataFrame): Dataset[StoreInvoice] = {

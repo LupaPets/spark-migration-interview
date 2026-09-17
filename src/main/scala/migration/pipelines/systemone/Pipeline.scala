@@ -18,15 +18,19 @@ final class Pipeline(config: PipelineConfig, tables: SourceTables, spark: SparkS
   override def transformInvoices(input: Dataset[InvoiceInput]): Dataset[StoreInvoice] = {
     import spark.implicits._
     val source = config.source
+    // Historical invoices need the same vet details and target fields as current invoices.
     InvoiceMappings.enrich(input, tables.table("vets"), tables.table("clinics"))
       .select(struct(input.columns.map(col): _*).as("invoice"), col("vet_name"))
       .as[(InvoiceInput, Option[String])]
       .map { case (r, vetName) =>
+        // Standardize exported dates for the billing system.
         val dateFormat = DateTimeFormatter.ofPattern("YYYY-MM-dd", Locale.UK)
         StoreInvoice(
+          // Keep invoice IDs repeatable so rerunning an import does not create new invoices.
           StableIds.entity(source, "", "invoice", r.invoice_id),
           source, r.clinic_id, r.invoice_id,
           StableIds.entity(source, r.clinic_id, "client", r.client_id),
+          // Treat historical amounts as positive billing values.
           vetName, math.abs(r.amount_cents), LocalDate.parse(r.invoice_date).format(dateFormat)
         )
       }
